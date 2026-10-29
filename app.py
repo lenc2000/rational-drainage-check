@@ -159,9 +159,9 @@ sec = C.check_section(shape_key, dims, Q, n_val, S, allow, safety, vmin, vmax)
 with right:
     st.subheader("결과")
     m1, m2, m3 = st.columns(3)
-    m1.metric("도달시간 tc", f"{tc.tc:.1f} 분")
-    m2.metric("설계 강우강도 I", f"{rain.I_design:.1f} mm/hr", help=f"근거: {rain.basis}")
-    m3.metric("첨두유량 Q", f"{Q:.3f} ㎥/s")
+    m1.metric("도달시간 tc (분)", f"{tc.tc:.1f}")
+    m2.metric("강우강도 I (mm/hr)", f"{rain.I_design:.1f}", help=f"근거: {rain.basis}")
+    m3.metric("첨두유량 Q (㎥/s)", f"{Q:.3f}")
 
     verdict = "통수 가능 (OK)" if sec.ok else "통수 불가 (NG)"
     msg = f"**{sec.size_text}** — {verdict}"
@@ -235,7 +235,7 @@ with right:
     st.markdown("##### 강우강도 · 방재성능목표 비교")
     a, b, n = stn.coef[T]
     comp = [("관측소 / 재현기간", f"{stn.name} ({stn.agency}) / {T}년"),
-            ("강우강도식", f"I = {a:g} / (t^{n:g} + {b:g})"),
+            ("강우강도식", f"I = {a} / (t^{n} + {b})"),
             (f"도달시간 {tc.tc:.1f}분 강우강도", f"{rain.I_idf:.1f} mm/hr"),
             ("강우강도식 1시간 강우량", f"{rain.depth_1h_idf:.1f} mm")]
     if rain.target_1h:
@@ -282,7 +282,7 @@ with right:
             lines.append(f"2) 유하속도 ({vtxt})  V = {tc.velocity:.2f} m/s")
             lines.append(f"   유하시간  t2 = L / V = {L_m:g} / {tc.velocity:.2f} / 60 = {tc.t_travel:.2f} 분")
             lines.append(f"   도달시간  tc = 유입시간 {tc.t_inlet:.2f} + 유하시간 {tc.t_travel:.2f} = {tc.tc:.2f} 분")
-        lines.append(f"3) 강우강도  I = {a:g} / ({tc.tc:.2f}^{n:g} + {b:g}) = {rain.I_idf:.2f} mm/hr")
+        lines.append(f"3) 강우강도  I = {a} / ({tc.tc:.2f}^{n} + {b}) = {rain.I_idf:.2f} mm/hr")
         if rain.basis == "방재성능목표 보정":
             lines.append(f"   방재성능목표 보정  I' = {rain.I_idf:.2f} × {rain.ratio:.3f} = {rain.I_design:.2f} mm/hr")
         lines.append(f"4) 첨두유량  Q = C·I·A / 360 = {C_val:.3f} × {rain.I_design:.2f} × {A_ha:g} / 360 = {Q:.4f} ㎥/s")
