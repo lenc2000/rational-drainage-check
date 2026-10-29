@@ -64,6 +64,25 @@ def test_target_ratio():
     assert r2.basis == "확률강우강도식"
 
 
+def test_equivalent_slope():
+    segs = [("1", 30, 150.0, 149.4), ("2", 25, 149.4, 149.025), ("3", 40, 149.025, 147.825),
+            ("4", 35, 147.825, 147.475), ("5", 30, 147.475, 146.725), ("6", 40, 146.725, 146.245)]
+    r = C.equivalent_slope(segs)
+    Ls = [30, 25, 40, 35, 30, 40]
+    Ss = [0.02, 0.015, 0.03, 0.01, 0.025, 0.012]
+    close(r.S_eq, (sum(Ls) / sum(L / math.sqrt(S) for L, S in zip(Ls, Ss))) ** 2)   # 손계산 0.016605
+    close(r.S_avg, 3.755 / 200)
+    assert r.S_min == min(r.rows, key=lambda x: x[5])[5] and not r.errors
+    bad = C.equivalent_slope([("a", 50, 10, 9.5), ("b", 50, 9.5, 9.6)])
+    assert bad.errors                                         # 역경사 구간 검출
+
+
+def test_kraven_cont_matches_old_excel():
+    # 기존 엑셀 양식(연속형 Kraven + Kerby) 모곡리 D지점 tc ≈ 9.54분
+    r = C.time_of_concentration("kraven_cont", 502.53, 103.0, t_inlet=C.kerby_minutes(30, 0.6, 0.25))
+    close(r.tc, 7.6764 + 502.53 / 4.5 / 60)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

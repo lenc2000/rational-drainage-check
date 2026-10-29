@@ -72,6 +72,7 @@ def nearest_stations(stations: dict[str, Station], lat: float, lon: float, k: in
 # ---------------------------------------------------------------------------
 TC_METHODS = {
     "kraven2": "유입시간 + 유하시간 (Kraven II, 경사별 유속표)",
+    "kraven_cont": "유입시간 + 유하시간 (Kraven 연속식, 기존 엑셀 양식)",
     "rziha": "유입시간 + 유하시간 (Rziha)",
     "kirpich": "Kirpich (전체 도달시간)",
     "velocity": "유입시간 + 유하시간 (유속 직접 입력)",
@@ -91,6 +92,14 @@ def kraven2_velocity(S: float) -> float:
     if S >= 1 / 200:
         return 3.0
     return 2.1
+
+
+def kraven_cont_velocity(S: float) -> float:
+    """연속형 Kraven (기존 엑셀 양식의 식)
+    S > 3/400 → V = 4.592 − 0.01194/S (최대 4.5),  S ≤ 3/400 → V = 35151.515S² − 79.393939S + 1.6181818 (최소 1.6)"""
+    if S > 3 / 400:
+        return min(4.5, 4.592 - 0.01194 / S)
+    return max(1.6, 35151.515 * S ** 2 - 79.393939 * S + 1.6181818)
 
 
 def rziha_velocity(S: float) -> float:
@@ -123,6 +132,8 @@ def time_of_concentration(method: str, L_m: float, H_m: float, t_inlet: float = 
         return TcResult(method, S, 0.0, None, tc, tc)
     if method == "kraven2":
         V = kraven2_velocity(S)
+    elif method == "kraven_cont":
+        V = kraven_cont_velocity(S)
     elif method == "rziha":
         V = rziha_velocity(S)
     elif method == "velocity":
@@ -166,7 +177,46 @@ def design_rain(coef: tuple, tc: float, target_1h: float | None, apply_target: b
 
 
 # ---------------------------------------------------------------------------
-# 4. 배수로 단면 통수능 (Manning 등류)
+# 4. 배수로 구간별 경사 → 등가경사
+# ---------------------------------------------------------------------------
+@dataclass
+class SlopeResult:
+    rows: list            # [(구간명, 연장, 시점표고, 종점표고, 낙차, 경사)]
+    total_length: float
+    total_drop: float
+    S_avg: float          # 단순 평균경사 = 총낙차 / 총연장
+    S_eq: float           # 등가경사 = (ΣL / Σ(L/√S))²
+    S_min: float
+    S_max: float
+    errors: list
+
+
+def equivalent_slope(segments) -> SlopeResult:
+    """segments: [(구간명, 연장 m, 시점표고 m, 종점표고 m), ...]
+    등가경사 S_eq = (ΣLi / Σ(Li/√Si))²  — 구간별 유하시간 합이 같아지는 단일 경사"""
+    rows, errors = [], []
+    for name, L, z1, z2 in segments:
+        if L is None or z1 is None or z2 is None or L <= 0:
+            continue
+        drop = z1 - z2
+        S = drop / L
+        rows.append((name, L, z1, z2, drop, S))
+        if S <= 0:
+            errors.append(f"{name}: 종점 표고가 시점 표고보다 높거나 같습니다 (경사 0 이하).")
+    if not rows:
+        return SlopeResult([], 0, 0, 0, 0, 0, 0, ["구간 자료가 없습니다."])
+    TL = sum(r[1] for r in rows)
+    TD = sum(r[4] for r in rows)
+    if errors:
+        return SlopeResult(rows, TL, TD, TD / TL, 0, 0, 0, errors)
+    denom = sum(r[1] / math.sqrt(r[5]) for r in rows)
+    S_eq = (TL / denom) ** 2
+    slopes = [r[5] for r in rows]
+    return SlopeResult(rows, TL, TD, TD / TL, S_eq, min(slopes), max(slopes), [])
+
+
+# ---------------------------------------------------------------------------
+# 5. 배수로 단면 통수능 (Manning 등류)
 # ---------------------------------------------------------------------------
 def rect_geom(B: float, y: float):
     A = B * y
