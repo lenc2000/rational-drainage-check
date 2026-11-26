@@ -48,6 +48,16 @@ N_PRESETS = {
     "직접 입력": None,
 }
 
+KERBY_N = {
+    "매끄러운 불투수면·포장 (0.02)": 0.02,
+    "다져진 매끄러운 나지 (0.10)": 0.10,
+    "빈약한 초지·경작지·약간 거친 나지 (0.20)": 0.20,
+    "목초지·보통 초지 (0.40)": 0.40,
+    "활엽수림 (0.60)": 0.60,
+    "침엽수림·낙엽 두꺼운 숲·밀생 초지 (0.80)": 0.80,
+    "직접 입력": None,
+}
+
 
 def card(html: str, color: str, bg: str):
     st.markdown(f'<div style="border:2px solid {color};background:{bg};border-radius:12px;'
@@ -201,13 +211,21 @@ with left:
             t_inlet = t1_direct
         else:
             inlet_mode = "kerby"
-            k1, k2, k3 = st.columns(3)
-            kl = k1.number_input("표면류 길이 (m)", min_value=1.0, value=30.0)
-            kn = k2.number_input("지체계수 N", min_value=0.01, value=0.6, step=0.05,
-                                 help="포장면 0.02, 나지 0.1, 초지 0.3~0.4, 산림 0.6~0.8")
-            ks = k3.number_input("사면경사 (m/m)", min_value=0.001, value=0.25, step=0.01, format="%.3f")
-            t_inlet = C.kerby_minutes(kl, kn, ks)
-            st.caption(f"Kerby 유입시간 = 1.44 × ({kl:g}×{kn:g}/√{ks:g})^0.467 = {t_inlet:.2f} 분")
+            st.caption("최원점 부근에서 빗물이 골짜기·수로에 모이기 전까지 사면 위를 얇게 흘러내리는 구간을 넣습니다.")
+            k1, k2 = st.columns(2)
+            kl = k1.number_input("표면류 길이 (m)", min_value=1.0, value=30.0,
+                                 help="물이 골짜기나 수로에 모이기 전까지의 사면 거리. 산지는 보통 수십 m, Kerby 공식은 약 365 m 이하에서 씁니다.")
+            ks_pct = k2.number_input("사면경사 (%)", min_value=0.1, value=25.0, step=1.0, format="%.1f",
+                                     help="표면류 길이 구간의 표고차 ÷ 길이 × 100. 예) 30 m 가는 동안 7.5 m 낮아지면 25%")
+            ks = ks_pct / 100
+            st.caption("⚠️ 사면경사는 아래 ③ 배수로 등가경사(보통 1~3%)가 아니라 최원점 부근 비탈의 경사입니다(산지 보통 10~40%). "
+                       "배수로 경사를 넣으면 유입시간이 길어져 홍수량이 작게(위험 쪽으로) 나옵니다.")
+            n_choice = st.selectbox("지체계수 N (지표면 상태)", list(KERBY_N), index=list(KERBY_N).index("활엽수림 (0.60)"),
+                                    help="Kerby 지체계수 — 홍수량 산정 표준지침 표와 같은 값. 섞여 있으면 흐름 경로 길이 비율로 평균하거나, "
+                                         "애매하면 작은 값(안전 측)을 쓰세요.")
+            kn = KERBY_N[n_choice] if KERBY_N[n_choice] is not None else \
+                st.number_input("지체계수 N 직접 입력", min_value=0.01, value=0.60, step=0.05, format="%.2f")
+            st.caption(f"Kerby 유입시간 = 1.44 × ({kl:g} × {kn:g} / √{ks:g})^0.467 = {t_inlet:.2f} 분  (사면경사 {ks_pct:g}% = {ks:g} m/m)")
         if method == "velocity":
             vel_in = st.number_input("유하 평균유속 V (m/s)", min_value=0.1, value=3.0, step=0.1)
     elif method == "direct":
