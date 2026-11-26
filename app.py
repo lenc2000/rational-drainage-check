@@ -293,10 +293,17 @@ if slope_ok:
 with right:
     st.markdown('<div id="result-pane"></div>', unsafe_allow_html=True)
     st.subheader("결과")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("도달시간 tc (분)", f"{tc.tc:.1f}")
-    m2.metric("강우강도 I (mm/hr)", f"{rain.I_design:.1f}", help=f"근거: {rain.basis}")
-    m3.metric("홍수량 Q (㎥/s)", f"{Q:.3f}")
+    # 결과 칸이 좁아도 숫자가 잘리지 않도록 작은 카드 3개로 표시
+    def kpi(label, value, unit):
+        return (f'<div style="flex:1;min-width:0;background:#f5f7fa;border-radius:10px;padding:8px 10px">'
+                f'<div style="font-size:12px;color:#666;white-space:nowrap">{label}</div>'
+                f'<div style="font-size:24px;font-weight:700;line-height:1.2">{value}'
+                f'<span style="font-size:12px;font-weight:400;color:#666"> {unit}</span></div></div>')
+    st.markdown('<div style="display:flex;gap:8px;margin-bottom:8px">'
+                + kpi("도달시간 tc", f"{tc.tc:.1f}", "분")
+                + kpi("강우강도 I", f"{rain.I_design:.1f}", "mm/hr")
+                + kpi("홍수량 Q", f"{Q:.3f}", "㎥/s") + "</div>", unsafe_allow_html=True)
+    st.caption(f"강우강도 근거: {rain.basis}")
 
     if not slope_ok:
         st.error("③ 배수로 구간 경사를 고쳐 주세요. 경사가 0 이하인 구간이 있으면 단면 검토를 할 수 없습니다.")
