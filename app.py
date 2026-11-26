@@ -58,7 +58,18 @@ st.title("💧 소규모 유역 합리식 수리계산")
 st.caption("WAMIS 확률강우강도식(지역빈도해석, General형) · 합리식 · 등가경사 · Manning 등류 단면 검토 — "
            "대구·경북·경남·울산·부산 강우관측소 210곳")
 
-left, right = st.columns([1, 1.15], gap="large")
+st.markdown("""
+<style>
+@media (min-width: 900px) {
+  /* 오른쪽 결과 칸: 화면을 내려도 따라 내려오도록 고정, 넘치면 칸 안에서 스크롤 */
+  div[data-testid="stColumn"]:has(#result-pane) {
+    position: sticky; top: 3.75rem; align-self: flex-start;
+    max-height: calc(100vh - 4.5rem); overflow-y: auto; padding-right: 6px;
+  }
+}
+</style>""", unsafe_allow_html=True)
+
+left, right = st.columns([1.45, 1], gap="large")
 
 # ===========================================================================
 # 입력
@@ -120,29 +131,30 @@ with left:
 
         near_codes = {s.code for _, s in near}
         fig_map = go.Figure()
+
+        def add_pts(lats, lons, texts, name, size, color):
+            # 흰 테두리처럼 보이도록 조금 큰 흰 점을 먼저 깔고 그 위에 색 점
+            fig_map.add_trace(go.Scattermapbox(lat=lats, lon=lons, mode="markers", showlegend=False,
+                                               marker=dict(size=size + 5, color="white"), hoverinfo="skip"))
+            fig_map.add_trace(go.Scattermapbox(lat=lats, lon=lons, mode="markers", name=name,
+                                               marker=dict(size=size, color=color), text=texts, hoverinfo="text"))
+
         rest = [s for s in ST.values() if s.code not in near_codes and s.code != code]
-        fig_map.add_trace(go.Scattermapbox(
-            lat=[s.lat for s in rest], lon=[s.lon for s in rest], mode="markers", name="관측소",
-            marker=dict(size=8, color="#78909c"), text=[s.label for s in rest], hoverinfo="text"))
+        add_pts([s.lat for s in rest], [s.lon for s in rest], [s.label for s in rest], "관측소", 11, "#7b1fa2")
         nearby = [s for _, s in near if s.code != code]
         if nearby:
-            fig_map.add_trace(go.Scattermapbox(
-                lat=[s.lat for s in nearby], lon=[s.lon for s in nearby], mode="markers", name="가까운 관측소",
-                marker=dict(size=13, color="#fb8c00"), text=[s.label for s in nearby], hoverinfo="text"))
-        fig_map.add_trace(go.Scattermapbox(
-            lat=[stn.lat], lon=[stn.lon], mode="markers", name="계산에 쓰는 관측소",
-            marker=dict(size=17, color="#1e88e5"), text=[stn.label], hoverinfo="text"))
+            add_pts([s.lat for s in nearby], [s.lon for s in nearby], [s.label for s in nearby],
+                    "가까운 관측소", 15, "#ff6d00")
+        add_pts([stn.lat], [stn.lon], [stn.label], "계산에 쓰는 관측소", 19, "#0d47a1")
         if site:
-            fig_map.add_trace(go.Scattermapbox(
-                lat=[site[0]], lon=[site[1]], mode="markers", name="현장",
-                marker=dict(size=17, color="#e53935"), text=[f"현장 · {site_name}"], hoverinfo="text"))
+            add_pts([site[0]], [site[1]], [f"현장 · {site_name}"], "현장", 19, "#d50000")
         ctr = site if site else (stn.lat, stn.lon)
         fig_map.update_layout(
             mapbox=dict(style="open-street-map", center=dict(lat=ctr[0], lon=ctr[1]), zoom=9 if site else 7),
             height=380, margin=dict(l=0, r=0, t=0, b=0),
             legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0))
         st.plotly_chart(fig_map, use_container_width=True)
-        st.caption("● 빨강 현장 · 파랑 계산에 쓰는 관측소 · 주황 가까운 관측소 · 회색 그 밖의 관측소 (점에 마우스를 올리면 이름). "
+        st.caption("● 빨강 현장 · 파랑 계산에 쓰는 관측소 · 주황 가까운 관측소 · 보라 그 밖의 관측소 (점에 마우스를 올리면 이름). "
                    "표준지침은 유역을 지배하는 관측소(티센망)를 쓰도록 하고 있으니, 거리만으로 정하지 말고 확인하세요.")
 
     T = st.selectbox("재현기간 (년)", RETURN_PERIODS,
@@ -279,6 +291,7 @@ if slope_ok:
 # 결과
 # ===========================================================================
 with right:
+    st.markdown('<div id="result-pane"></div>', unsafe_allow_html=True)
     st.subheader("결과")
     m1, m2, m3 = st.columns(3)
     m1.metric("도달시간 tc (분)", f"{tc.tc:.1f}")
