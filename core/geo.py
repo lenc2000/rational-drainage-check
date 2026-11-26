@@ -25,6 +25,7 @@ class GeoResult:
     lon: float
     display: str     # 지도 서비스가 찾은 이름
     matched: str     # 실제로 찾는 데 쓴 검색어
+    trimmed: bool = False   # 뒤쪽 단어(번지 등)를 빼고 찾았는지
 
 
 def _query(q: str, timeout: float = 8.0):
@@ -37,10 +38,11 @@ def _query(q: str, timeout: float = 8.0):
 
 def geocode(address: str) -> GeoResult | None:
     toks = [ABBR.get(t, t) for t in address.replace(",", " ").split()]
+    n0 = len(toks)
     while toks:
         q = " ".join(toks)
         hit = _query(q)
         if hit:
-            return GeoResult(float(hit["lat"]), float(hit["lon"]), hit.get("display_name", q), q)
+            return GeoResult(float(hit["lat"]), float(hit["lon"]), hit.get("display_name", q), q, len(toks) < n0)
         toks = toks[:-1]          # 번지 → 리 → 면 순으로 줄여 가며 다시 찾기
     return None

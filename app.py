@@ -99,7 +99,7 @@ with left:
             else:
                 site, site_name = (g.lat, g.lon), addr.strip()
                 st.caption(f"찾은 위치 : {g.display}  (북위 {g.lat:.4f}°, 동경 {g.lon:.4f}°)"
-                           + ("" if g.matched == addr.strip() else f"  — '{g.matched}' 까지만 찾았습니다"))
+                           + (f"  — 전체 주소는 못 찾아 '{g.matched}' 까지로 찾았습니다" if g.trimmed else ""))
         if st.checkbox("위도·경도 직접 입력", value=False):
             cc1, cc2 = st.columns(2)
             q_lat = cc1.number_input("위도 (°)", value=site[0] if site else 36.6000, format="%.4f", step=0.01)
