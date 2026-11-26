@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from core import calc as C
+from core import geo as G
 from core import report
 
 st.set_page_config(page_title="합리식 수리계산", page_icon="💧", layout="wide")
@@ -18,6 +19,17 @@ st.set_page_config(page_title="합리식 수리계산", page_icon="💧", layout
 @st.cache_data
 def stations():
     return C.load_stations()
+
+
+@st.cache_data(ttl=86400, show_spinner="주소를 찾는 중…")
+def geocode_cached(address: str):
+    return G.geocode(address)
+
+
+def pick_station(code: str):
+    """가까운 관측소 버튼 — 검색어를 비우고 그 관측소를 선택"""
+    st.session_state["stn_query"] = ""
+    st.session_state["stn_code"] = code
 
 
 ST = stations()
@@ -54,7 +66,7 @@ left, right = st.columns([1, 1.15], gap="large")
 with left:
     # ---------------- ① 강우 조건 ----------------
     st.subheader("① 강우 조건")
-    query = st.text_input("🔍 강우관측소 검색", value="",
+    query = st.text_input("🔍 강우관측소 검색", key="stn_query",
                           placeholder="예: 문경, 영천, 기상청, 형산강 — 여러 단어는 띄어쓰기")
     toks = [t for t in query.split() if t]
     codes = [k for k in ALL_CODES
@@ -65,20 +77,73 @@ with left:
         codes = ALL_CODES
     elif toks:
         st.caption(f"검색 결과 {len(codes)}곳")
-    default_idx = codes.index("20051273") if "20051273" in codes else 0
-    code = st.selectbox("강우관측소 (지역)", codes, index=default_idx, format_func=lambda k: ST[k].label)
+    if st.session_state.get("stn_code") not in codes:
+        st.session_state["stn_code"] = "20051273" if "20051273" in codes else codes[0]
+    code = st.selectbox("강우관측소 (지역)", codes, key="stn_code", format_func=lambda k: ST[k].label)
     stn = ST[code]
     st.caption(f"위치 : 북위 {stn.lat:.4f}°, 동경 {stn.lon:.4f}°  ·  지역빈도해석 지역구분 {stn.region}")
 
-    with st.expander("📍 현장 좌표로 가까운 관측소 찾기"):
-        cc1, cc2 = st.columns(2)
-        q_lat = cc1.number_input("위도 (°)", value=36.6000, format="%.4f", step=0.01)
-        q_lon = cc2.number_input("경도 (°)", value=128.1500, format="%.4f", step=0.01)
-        near = C.nearest_stations(ST, q_lat, q_lon, 5)
-        st.dataframe(pd.DataFrame({"관측소": [s.label for _, s in near],
-                                   "거리 (km)": [round(d, 1) for d, _ in near]}),
-                     hide_index=True, use_container_width=True)
-        st.caption("관측소 이름을 위 검색창에 넣어 고르세요. 표준지침은 유역을 지배하는 관측소(티센망)를 쓰도록 하고 있습니다.")
+    with st.expander("🗺️ 현장 주소로 가까운 관측소 찾기 (지도)", expanded=True):
+        addr = st.text_input("현장 주소", key="site_addr",
+                             placeholder="예: 경북 문경시 마성면 모곡리 — 번지는 못 찾을 수 있어 리·동까지 넣는 것이 좋습니다")
+        site, site_name = None, ""
+        if addr.strip():
+            try:
+                g = geocode_cached(addr.strip())
+            except Exception:
+                g = "error"
+            if g == "error":
+                st.warning("주소 검색 서버에 연결하지 못했습니다. 잠시 뒤 다시 하거나, 아래 '위도·경도 직접 입력'을 쓰세요.")
+            elif g is None:
+                st.warning("주소를 찾지 못했습니다. 시·군·읍·면·리까지만 넣어 보거나, 아래 '위도·경도 직접 입력'을 쓰세요.")
+            else:
+                site, site_name = (g.lat, g.lon), addr.strip()
+                st.caption(f"찾은 위치 : {g.display}  (북위 {g.lat:.4f}°, 동경 {g.lon:.4f}°)"
+                           + ("" if g.matched == addr.strip() else f"  — '{g.matched}' 까지만 찾았습니다"))
+        if st.checkbox("위도·경도 직접 입력", value=False):
+            cc1, cc2 = st.columns(2)
+            q_lat = cc1.number_input("위도 (°)", value=site[0] if site else 36.6000, format="%.4f", step=0.01)
+            q_lon = cc2.number_input("경도 (°)", value=site[1] if site else 128.1500, format="%.4f", step=0.01)
+            site, site_name = (q_lat, q_lon), "입력한 좌표"
+
+        near = C.nearest_stations(ST, site[0], site[1], 5) if site else []
+        if near:
+            st.dataframe(pd.DataFrame({"가까운 관측소": [s.label for _, s in near],
+                                       "거리 (km)": [round(d, 1) for d, _ in near]}),
+                         hide_index=True, use_container_width=True)
+            d0, s0 = near[0]
+            if s0.code != code:
+                st.button(f"가장 가까운 '{s0.name} ({s0.agency})' 관측소로 계산하기 ({d0:.1f} km)",
+                          on_click=pick_station, args=(s0.code,), use_container_width=True)
+            else:
+                st.caption(f"지금 가장 가까운 관측소({s0.name}, {d0:.1f} km)로 계산하고 있습니다.")
+
+        near_codes = {s.code for _, s in near}
+        fig_map = go.Figure()
+        rest = [s for s in ST.values() if s.code not in near_codes and s.code != code]
+        fig_map.add_trace(go.Scattermapbox(
+            lat=[s.lat for s in rest], lon=[s.lon for s in rest], mode="markers", name="관측소",
+            marker=dict(size=8, color="#78909c"), text=[s.label for s in rest], hoverinfo="text"))
+        nearby = [s for _, s in near if s.code != code]
+        if nearby:
+            fig_map.add_trace(go.Scattermapbox(
+                lat=[s.lat for s in nearby], lon=[s.lon for s in nearby], mode="markers", name="가까운 관측소",
+                marker=dict(size=13, color="#fb8c00"), text=[s.label for s in nearby], hoverinfo="text"))
+        fig_map.add_trace(go.Scattermapbox(
+            lat=[stn.lat], lon=[stn.lon], mode="markers", name="계산에 쓰는 관측소",
+            marker=dict(size=17, color="#1e88e5"), text=[stn.label], hoverinfo="text"))
+        if site:
+            fig_map.add_trace(go.Scattermapbox(
+                lat=[site[0]], lon=[site[1]], mode="markers", name="현장",
+                marker=dict(size=17, color="#e53935"), text=[f"현장 · {site_name}"], hoverinfo="text"))
+        ctr = site if site else (stn.lat, stn.lon)
+        fig_map.update_layout(
+            mapbox=dict(style="open-street-map", center=dict(lat=ctr[0], lon=ctr[1]), zoom=9 if site else 7),
+            height=380, margin=dict(l=0, r=0, t=0, b=0),
+            legend=dict(orientation="h", y=1.0, yanchor="bottom", x=0))
+        st.plotly_chart(fig_map, use_container_width=True)
+        st.caption("● 빨강 현장 · 파랑 계산에 쓰는 관측소 · 주황 가까운 관측소 · 회색 그 밖의 관측소 (점에 마우스를 올리면 이름). "
+                   "표준지침은 유역을 지배하는 관측소(티센망)를 쓰도록 하고 있으니, 거리만으로 정하지 말고 확인하세요.")
 
     T = st.selectbox("재현기간 (년)", RETURN_PERIODS,
                      index=RETURN_PERIODS.index(50) if 50 in RETURN_PERIODS else 0)
@@ -90,7 +155,7 @@ with left:
 
     # ---------------- ② 유역·유량 ----------------
     st.subheader("② 유역 및 홍수량")
-    st.caption("기본값은 예시(문경 모곡리 D지점)입니다. 현장 값으로 바꿔 주세요.")
+    st.caption("아래 기본값은 예시값입니다. 현장 값으로 바꿔서 계산하세요.")
     A_ha = st.number_input("유역면적 A (ha)", min_value=0.0001, value=3.9401, step=0.1, format="%.4f")
     st.caption(f"= {A_ha * 10000:,.0f} ㎡ = {A_ha / 100:.4f} ㎢")
 
