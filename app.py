@@ -60,7 +60,7 @@ st.caption("WAMIS 확률강우강도식(지역빈도해석, General형) · 합�
 
 st.markdown("""
 <style>
-@media (min-width: 900px) {
+@media (min-width: 640px) {
   /* 오른쪽 결과 칸: 화면을 내려도 따라 내려오도록 고정, 넘치면 칸 안에서 스크롤 */
   div[data-testid="stColumn"]:has(#result-pane) {
     position: sticky; top: 3.75rem; align-self: flex-start;
